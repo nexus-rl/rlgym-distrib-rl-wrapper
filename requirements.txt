@@ -1,0 +1,6 @@
+gym==0.25.0
+rlgym==1.2.0
+numpy==1.21.4
+rlgym-tools==1.7.0
+pywin32==304
+distrib-rl
