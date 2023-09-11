@@ -1,4 +1,4 @@
-from rlgym.utils.state_setters import DefaultState, RandomState
+from rlgym_sim.utils.state_setters import DefaultState, RandomState
 from rlgym_tools.extra_state_setters.augment_setter import AugmentSetter
 from rlgym_tools.extra_state_setters.goalie_state import GoaliePracticeState
 from rlgym_tools.extra_state_setters.hoops_setter import HoopsLikeSetter
@@ -7,7 +7,7 @@ from rlgym_tools.extra_state_setters.wall_state import WallPracticeState
 from rlgym_tools.extra_state_setters.symmetric_setter import KickoffLikeSetter
 from rlgym_tools.extra_state_setters.weighted_sample_setter import WeightedSampleSetter
 
-from distrib_rl.Utils.FactoryBuilder import build_component_factory
+from .factory_builder import build_component_factory
 
 _builders = {
     "default": DefaultState,

@@ -2,9 +2,9 @@ from typing import Any
 
 import numpy as np
 
-from rlgym.utils.common_values import NUM_ACTIONS
-from rlgym.utils.gamestates import PlayerData, GameState
-from rlgym.utils.obs_builders import ObsBuilder
+from rlgym_sim.utils.common_values import NUM_ACTIONS
+from rlgym_sim.utils.gamestates import PlayerData, GameState
+from rlgym_sim.utils.obs_builders import ObsBuilder
 
 
 class GeneralStacker(ObsBuilder):

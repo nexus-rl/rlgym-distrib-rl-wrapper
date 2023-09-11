@@ -1,7 +1,7 @@
 import numpy as np
 from gym import spaces
 from gym.spaces import Discrete
-from rlgym.utils.action_parsers import ActionParser
+from rlgym_sim.utils.action_parsers import ActionParser
 
 
 class NectoActionParser(ActionParser):
@@ -42,8 +42,12 @@ class NectoActionParser(ActionParser):
     def parse_actions(self, actions, state):
         # hacky pass through to allow multiple types of agent actions while still parsing nectos
 
+        if type(actions) == int:
+            return self._lookup_table[actions:actions + 1]
+
         # strip out fillers, pass through 8sets, get look up table values, recombine
         parsed_actions = []
+
         for action in actions:
             # support reconstruction
             if action.size != 8:

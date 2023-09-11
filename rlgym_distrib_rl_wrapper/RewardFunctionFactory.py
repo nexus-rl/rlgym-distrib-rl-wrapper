@@ -1,5 +1,5 @@
-from rlgym.utils.reward_functions.combined_reward import CombinedReward
-from rlgym.utils.reward_functions.common_rewards import AlignBallGoal, \
+from rlgym_sim.utils.reward_functions.combined_reward import CombinedReward
+from rlgym_sim.utils.reward_functions.common_rewards import AlignBallGoal, \
         BallYCoordinateReward, ConstantReward, EventReward, FaceBallReward, \
         LiuDistanceBallToGoalReward, LiuDistancePlayerToBallReward, \
         RewardIfBehindBall, RewardIfClosestToBall, RewardIfTouchedLast, \
@@ -21,7 +21,7 @@ from rlgym_tools.extra_rewards.multi_model_rewards import MultiModelReward
 from rlgym_tools.extra_rewards.multiply_rewards import MultiplyRewards
 #from rlgym_tools.extra_rewards.sequential_rewards import SequentialRewards
 
-from distrib_rl.Utils.FactoryBuilder import build_component_factory
+from .factory_builder import build_component_factory
 
 _builders = {
     "combined": CombinedReward,
@@ -59,7 +59,7 @@ _arg_transformers = {
         "negative_slope": kwargs.get("negative_slope", 0.1)
     },
     "distribute": lambda **kwargs: {
-        "reward_function": build_reward_function_from_config(kwargs["reward"]),
+        "reward_func": build_reward_function_from_config(kwargs["reward"]),
         "team_spirit": kwargs.get("team_spirit", 0.3)
     },
     "multi_model": lambda **kwargs: {

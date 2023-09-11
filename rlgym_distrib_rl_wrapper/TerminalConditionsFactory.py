@@ -1,7 +1,7 @@
-from rlgym.utils.terminal_conditions.common_conditions import BallTouchedCondition, GoalScoredCondition, NoTouchTimeoutCondition, TimeoutCondition
+from rlgym_sim.utils.terminal_conditions.common_conditions import BallTouchedCondition, GoalScoredCondition, NoTouchTimeoutCondition, TimeoutCondition
 from rlgym_tools.extra_terminals.game_condition import GameCondition
 
-from distrib_rl.Utils.FactoryBuilder import build_component_factory
+from .factory_builder import build_component_factory
 
 
 _builders = {

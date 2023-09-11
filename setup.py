@@ -17,10 +17,8 @@ setup(
     long_description_content_type='text/markdown',
     url='https://github.com/nexus-rl/rlgym-distrib-rl-wrapper',
     install_requires=[
-        'distrib-rl',
-        'gym==0.25.0',
-        'pywin32==228',
-        'rlgym==1.2.0',
+        'gym',
+        'rlgym-sim',
         'rlgym-tools==1.7.0',
     ],
     python_requires='>=3.7',

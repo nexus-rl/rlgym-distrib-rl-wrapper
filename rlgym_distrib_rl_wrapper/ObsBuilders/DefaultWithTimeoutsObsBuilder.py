@@ -1,9 +1,9 @@
 import math
 import numpy as np
 from typing import Any, List
-from rlgym.utils import common_values
-from rlgym.utils.gamestates import PlayerData, GameState
-from rlgym.utils.obs_builders import ObsBuilder
+from rlgym_sim.utils import common_values
+from rlgym_sim.utils.gamestates import PlayerData, GameState
+from rlgym_sim.utils.obs_builders import ObsBuilder
 
 LARGE_BOOST_MASK = np.array([
     0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,

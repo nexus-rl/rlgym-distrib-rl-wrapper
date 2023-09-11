@@ -1,26 +1,27 @@
 import os
 from typing import Optional, Tuple, Union
 from numpy import ndarray
+import random
 
-from rlgym.envs import Match
-from rlgym.gym import Gym as BaseRLGymEnvironment
-from rlgym.gamelaunch import LaunchPreference
+from rlgym_sim import make
+from rlgym_sim.gym import Gym as BaseRLGymEnvironment
+from .StateSetters import DynamicGMSetter
 
 from gym import Env
 from gym.utils import seeding
 
-from rlgym.utils.terminal_conditions.common_conditions import TimeoutCondition, GoalScoredCondition
-from rlgym.utils.action_parsers import DiscreteAction
-from rlgym.utils.obs_builders import DefaultObs
-from rlgym.utils.reward_functions import DefaultReward
-from rlgym.utils.state_setters import DefaultState
+from rlgym_sim.utils.terminal_conditions.common_conditions import TimeoutCondition, GoalScoredCondition
+from rlgym_sim.utils.action_parsers import DiscreteAction
+from rlgym_sim.utils.obs_builders import DefaultObs
+from rlgym_sim.utils.reward_functions import DefaultReward
+from rlgym_sim.utils.state_setters import DefaultState
 from .ActionParserFactory import build_action_parser_from_config
 from .ObsBuilderFactory import build_obs_builder_from_config
 from .RewardFunctionFactory import build_reward_function_from_config
 from .StateSetterFactory import build_state_setter_from_config
 from .TerminalConditionsFactory import build_terminal_conditions_from_config
 
-_match_config_parsers = {
+_make_config_parsers = {
     "action_parser": build_action_parser_from_config,
     "obs_builder": build_obs_builder_from_config,
     "state_setter": build_state_setter_from_config,
@@ -28,47 +29,60 @@ _match_config_parsers = {
     "terminal_conditions": build_terminal_conditions_from_config,
 }
 
-_match_kwarg_names = [
-    "action_parser",
-    "obs_builder",
+_make_kwarg_names = [
     "reward_function",
-    "state_setter",
     "terminal_conditions",
+    "obs_builder",
+    "action_parser",
+    "state_setter",
     "team_size",
+    "spawn_opponents",
+    "copy_gamestate_every_step",
     "tick_skip",
-    "game_speed",
     "gravity",
     "boost_consumption",
-    "spawn_opponents"
+    "dodge_deadzone",
 ]
 
-_env_kwarg_names = [
-    "launch_preference",
-    "use_injector",
-    "force_paging",
-    "raise_on_crash",
-    "auto_minimize"
-]
+_make_kwarg_key_transformations = {
+    "reward_function": "reward_fn"
+}
 
-class RLGymEnvironment(BaseRLGymEnvironment):
+class RLGymEnvironment(Env):
     """The main Rocket League Gym class. It encapsulates the process of managing
     the RLGym environment according to a dynamic, declarative configuration.
 
     The methods are accessed publicly as "step", "reset", etc...
     """
 
-    _match: Match
-
     def __init__(self, **kwargs):
         self._config = kwargs
-        match_kwargs = self._parse_match_kwargs(kwargs)
-        self._match = Match(**match_kwargs)
-        env_kwargs = self._parse_env_kwargs(kwargs)
 
-        super().__init__(self._match, **env_kwargs)
+        self._env: BaseRLGymEnvironment = None
+        self._first_reset = True
+        self._state_setter = None
+        self._team_size = 1
+        self._spawn_opponents = False
 
-        self.observation_space = self._match.observation_space
-        self.action_space = self._match.action_space
+        make_kwargs = self._parse_make_kwargs(kwargs)
+
+        self._env = make(**make_kwargs)
+
+        self.observation_space = self._env.observation_space
+        self.action_space = self._env.action_space
+
+        self._init_step_counter()
+
+    def _init_step_counter(self):
+        spawn_opponents = self._config.get("spawn_opponents", [False])
+        team_size = self._config.get("team_size", [1])
+
+        if type(spawn_opponents) is not list:
+            spawn_opponents = [spawn_opponents]
+        if type(team_size) is not list:
+            team_size = [team_size]
+
+        self._steps_by_team_size = {spawn: {size: 0 for size in team_size} for spawn in spawn_opponents}
 
 
     def step(
@@ -106,7 +120,11 @@ class RLGymEnvironment(BaseRLGymEnvironment):
                 a certain timelimit was exceeded, or the physics simulation has entered an invalid state.
         """
 
-        obs, reward, done, info = super().step(action)
+        # add one step per agent
+        steps_to_add = self._team_size * 2 if self._spawn_opponents else self._team_size
+        self._steps_by_team_size[self._spawn_opponents][self._team_size] += steps_to_add
+
+        obs, reward, done, info = self._env.step(action)
 
         # Note: RLGym doesn't return a value for terminated, so we'll just
         # assume it's False
@@ -152,74 +170,104 @@ class RLGymEnvironment(BaseRLGymEnvironment):
         if options is not None:
             self._config = options
 
-            if self._match is not None:
-                match_kwargs = self._parse_match_kwargs(self._config)
-                self._match.__init__(**match_kwargs)
+            make_kwargs = self._parse_make_kwargs(self._config)
 
-                self.observation_space = self._match.observation_space
-                self.action_space = self._match.action_space
+            self._env.close()
+            self._env = make(**make_kwargs)
+
+            self._init_step_counter()
+
+            self.observation_space = self._env.observation_space
+            self.action_space = self._env.action_space
+
+
+        team_size = self._config.get("team_size", 1)
+        spawn_opponents = self._config.get("spawn_opponents", False)
+
+        if type(spawn_opponents) is list:
+            if self._first_reset or len(self._steps_by_team_size[self._spawn_opponents]) == 0:
+                # always prefer max agent count on first reset, so the RLGym
+                # version of the env loads the correct number of cars
+                self._spawn_opponents = spawn_opponents = True
+            else:
+                counts = {
+                    False: sum(self._steps_by_team_size[False].values()),
+                    True: sum(self._steps_by_team_size[True].values())
+                }
+                # get the spawn_opponents value that has had the fewest total steps
+                self._spawn_opponents = spawn_opponents = min(counts, key=counts.get)
+
+        if type(team_size) is list:
+            if self._first_reset or len(self._steps_by_team_size[self._spawn_opponents]) == 0:
+                # always prefer max agent count on first reset, so the RLGym
+                # version of the env loads the correct number of cars
+                self._team_size = team_size = max(team_size)
+            else:
+                # make sure to initialize the dict for this spawn_opponents value if it's empty
+                steps_by_team_size = self._steps_by_team_size.get(spawn_opponents, {a: 0 for a in team_size})
+
+                # get the team size that has had the fewest steps
+                self._team_size = team_size = min(steps_by_team_size, key=steps_by_team_size.get)
+
+        # no longer our first rodeo
+        self._first_reset = False
+
+        blue_team_size = team_size
+        orange_team_size = team_size if spawn_opponents else 0
+        self._state_setter.set_team_size(blue=blue_team_size, orange=orange_team_size)
 
         if seed is not None:
             self._np_random, seed = seeding.np_random(seed)
 
-        return super().reset(return_info=return_info)
+        return self._env.reset(return_info=return_info)
 
-    def _parse_match_kwargs(self, config):
-        """Parses the config and returns the kwargs for the Match constructor
+    def _parse_make_kwargs(self, config):
+        """Parses the config and returns the kwargs for the make function
 
         Args:
             config (dict): The config to parse.
 
         Returns:
-            Dict: The kwargs for the Match constructor.
+            Dict: The kwargs dict for the make function
         """
         kwargs = {
-            "reward_function": DefaultReward(),
+            "reward_fn": DefaultReward(),
             "terminal_conditions": [TimeoutCondition(225), GoalScoredCondition()],
             "obs_builder": DefaultObs(),
             "action_parser": DiscreteAction(),
             "state_setter": DefaultState(),
             "team_size": 1,
+            "spawn_opponents": False,
+            "copy_gamestate_every_step": False,
             "tick_skip": 8,
-            "game_speed": 100,
-            "gravity": 1,
-            "boost_consumption": 1,
-            "spawn_opponents": False
+            "gravity": 1.0,
+            "boost_consumption": 1.0,
+            "dodge_deadzone": 0.8
         }
 
         for key, value in config.items():
-            if key in _match_config_parsers:
-                kwargs[key] = _match_config_parsers[key](value)
-            elif key in _match_kwarg_names:
-                kwargs[key] = value
-            elif key in _env_kwarg_names:
-                pass
+            if key in _make_config_parsers:
+                make_key = _make_kwarg_key_transformations.get(key, key)
+                kwargs[make_key] = _make_config_parsers[key](value)
+            elif key in _make_kwarg_names:
+                make_key = _make_kwarg_key_transformations.get(key, key)
+                kwargs[make_key] = value
             else:
-                raise ValueError(f"Unknown config key for environment `RocketLeague-v0`: {key}")
+                print(f"WARNING: skipping key {key}")
+                pass
+                #raise ValueError(f"Unknown config key for environment `RocketLeague-v0`: {key}")
+
+        if type(kwargs["spawn_opponents"]) is list:
+            kwargs["spawn_opponents"] = True
+            self._spawn_opponents = True
+
+        if type(kwargs["team_size"]) is list:
+            kwargs["team_size"] = max(kwargs["team_size"])
+            self._team_size = kwargs["team_size"]
+
+        kwargs["state_setter"] = DynamicGMSetter(kwargs["state_setter"])
+        self._state_setter = kwargs["state_setter"]
 
         return kwargs
 
-    def _parse_env_kwargs(self, config):
-        # note: the values for `use_injector`, `force_paging`, and
-        # `auto_minimize` are the opposite of the actual RLGym defaults, however
-        # they are consistent with the old implementation in distr-rl for the
-        # RLGym environment
-        kwargs = {
-            "pipe_id": os.getpid(),
-            "launch_preference": LaunchPreference.EPIC,
-            "use_injector": True,
-            "force_paging": True,
-            "raise_on_crash": False,
-            "auto_minimize": True
-        }
-
-        for key, value in config.items():
-            if key in _env_kwarg_names:
-                kwargs[key] = value
-            elif key in _match_kwarg_names:
-                pass
-            else:
-                raise ValueError(f"Unknown config key for environment `RocketLeague-v0`: {key}")
-
-        return kwargs
 
